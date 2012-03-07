@@ -3,13 +3,29 @@
 //  SignalR
 //
 //  Created by Alex Billingsley on 1/15/12.
-//  Copyright (c) 2012 DyKnow LLC. All rights reserved.
+//  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+//  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+//  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all copies or substantial portions of 
+//  the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+//  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+//  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+//  DEALINGS IN THE SOFTWARE.
 //
 
 #import "SRAutoTransport.h"
 #import "SRSignalRConfig.h"
 
-#import "SRTransport.h"
+#import "SRConnection.h"
+#import "SRServerSentEventsTransport.h"
+#import "SRLongPollingTransport.h"
 
 @interface SRAutoTransport ()
 
@@ -30,7 +46,7 @@
     if(self = [super init])
     {
         //List the transports in fallback order
-        _transports = [NSArray arrayWithObjects:[SRTransport ServerSentEvents],[SRTransport LongPolling], nil];
+        _transports = [NSArray arrayWithObjects:[[SRServerSentEventsTransport alloc] init],[[SRLongPollingTransport alloc] init], nil];
     }
     return self;
 }
@@ -58,7 +74,13 @@
              }
              else
              {
-                 [NSException raise:@"TransportInitializeException" format:@"No transport could be initialized successfully. Try specifying a different transport or none at all for auto initialization."];
+                 NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+                 [userInfo setObject:[NSString stringWithFormat:@"TransportInitializeException"] forKey:NSLocalizedFailureReasonErrorKey];
+                 [userInfo setObject:[NSString stringWithFormat:@"No transport could be initialized successfully. Try specifying a different transport or none at all for auto initialization."] forKey:NSLocalizedDescriptionKey];
+                 NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:@"com.SignalR-ObjC.%@",NSStringFromClass([self class])] 
+                                              code:0 
+                                          userInfo:userInfo];
+                 [connection didReceiveError:error];
              }
          }
          else

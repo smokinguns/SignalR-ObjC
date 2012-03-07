@@ -3,16 +3,31 @@
 //  SignalR
 //
 //  Created by Alex Billingsley on 10/17/11.
-//  Copyright (c) 2011 DyKnow LLC. All rights reserved.
+//  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+//  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+//  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all copies or substantial portions of 
+//  the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+//  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+//  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+//  DEALINGS IN THE SOFTWARE.
 //
 
+#include <TargetConditionals.h>
 #import "SRConnection.h"
 #import "SRSignalRConfig.h"
 
 #import "AFNetworking.h"
-#import "SBJson.h"
+#import "NSObject+SRJSON.h"
 #import "SRHttpHelper.h"
-#import "SRTransport.h"
+#import "SRAutoTransport.h"
 #import "SRNegotiationResponse.h"
 #import "SRVersion.h"
 #import "NSDictionary+QueryString.h"
@@ -35,17 +50,15 @@ void (^prepareRequest)(id);
 //private
 @synthesize assemblyVersion = _assemblyVersion;
 @synthesize transport = _transport;
-@synthesize initialized = _initialized;
 
 //public
-@synthesize initializedCalled = _initializedCalled;
 @synthesize started = _started;
 @synthesize received = _received;
 @synthesize error = _error;
 @synthesize closed = _closed;
+@synthesize reconnected = _reconnected;
 @synthesize groups = _groups;
 @synthesize credentials = _credentials;
-@synthesize protectionSpace = _protectionSpace;
 @synthesize sending = _sending;
 @synthesize url = _url;
 @synthesize active = _active;
@@ -53,6 +66,8 @@ void (^prepareRequest)(id);
 @synthesize connectionId = _connectionId;
 @synthesize items = _items;
 @synthesize queryString = _queryString;
+@synthesize initialized = _initialized;
+@synthesize headers = _headers;
 
 @synthesize delegate = _delegate;
 
@@ -102,6 +117,7 @@ void (^prepareRequest)(id);
         _queryString = queryString;
         _groups = [[NSMutableArray alloc] init];
         _items = [NSMutableDictionary dictionary];
+        _headers = [NSMutableDictionary dictionary];
     }
     return self;
 }
@@ -112,7 +128,7 @@ void (^prepareRequest)(id);
 - (void)start
 {
     // Pick the best transport supported by the client
-    [self start:[SRTransport Auto]];
+    [self start:[[SRAutoTransport alloc] init]];
 }
 
 - (void)start:(id <SRClientTransport>)transport
@@ -126,6 +142,11 @@ void (^prepareRequest)(id);
         
     _transport = transport;
     
+    [self negotiate];
+}
+
+- (void)negotiate
+{
     NSString *data = nil;
     
     if(_sending != nil)
@@ -134,13 +155,17 @@ void (^prepareRequest)(id);
     }
     
     NSString *negotiateUrl = [_url stringByAppendingString:kNegotiateRequest];
-
+    
 #if DEBUG_CONNECTION
     SR_DEBUG_LOG(@"[CONNECTION] will negotiate");
 #endif
     
     [SRHttpHelper postAsync:negotiateUrl requestPreparer:^(id request)
     {
+        if([request isKindOfClass:[NSMutableURLRequest class]])
+        {
+            [request setTimeoutInterval:30];
+        }
         [self prepareRequest:request];
     }
     continueWith:^(id response)
@@ -150,7 +175,7 @@ void (^prepareRequest)(id);
 #endif
         if([response isKindOfClass:[NSString class]])
         {        
-            SRNegotiationResponse *negotiationResponse = [[SRNegotiationResponse alloc] initWithDictionary:[[SBJsonParser new] objectWithString:response]];
+            SRNegotiationResponse *negotiationResponse = [[SRNegotiationResponse alloc] initWithDictionary:[response SRJSONValue]];
 #if DEBUG_CONNECTION
             SR_DEBUG_LOG(@"[CONNECTION] negotiation was successful %@",negotiationResponse);
 #endif
@@ -162,17 +187,17 @@ void (^prepareRequest)(id);
                 
                 [_transport start:self withData:data continueWith:
                  ^(id task) 
-                {
-                    _initialized = YES;
-                    
-                    if(_started != nil)
-                    {
-                        self.started();
-                    }
-                    if(_delegate && [_delegate respondsToSelector:@selector(SRConnectionDidOpen:)]){
-                        [self.delegate SRConnectionDidOpen:self];
-                    }
-                }];
+                 {
+                     _initialized = YES;
+                      
+                     if(_started != nil)
+                     {
+                         self.started();
+                     }
+                     if(_delegate && [_delegate respondsToSelector:@selector(SRConnectionDidOpen:)]){
+                         [self.delegate SRConnectionDidOpen:self];
+                     }
+                 }];
             }
         }
         else if([response isKindOfClass:[NSError class]])
@@ -207,14 +232,15 @@ void (^prepareRequest)(id);
     @try 
     {
         [_transport stop:self];
+    }
+    @finally 
+    {
         
         if(_closed != nil)
         {
             self.closed();
         }
-    }
-    @finally 
-    {
+
         if (_delegate && [_delegate respondsToSelector:@selector(SRConnectionDidClose:)]) 
         {
             [self.delegate SRConnectionDidClose:self];
@@ -237,7 +263,13 @@ void (^prepareRequest)(id);
 {
     if (!_initialized)
     {
-        [NSException raise:@"InvalidOperationException" format:@"Start must be called before data can be sent"];
+        NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+        [userInfo setObject:[NSString stringWithFormat:@"InvalidOperationException"] forKey:NSLocalizedFailureReasonErrorKey];
+        [userInfo setObject:[NSString stringWithFormat:@"Start must be called before data can be sent"] forKey:NSLocalizedDescriptionKey];
+        NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:@"com.SignalR-ObjC.%@",NSStringFromClass([self class])] 
+                                             code:0 
+                                         userInfo:userInfo];
+        [self didReceiveError:error];
     }
 
     [_transport send:self withData:message continueWith:block];
@@ -272,48 +304,48 @@ void (^prepareRequest)(id);
     }
 }
 
+- (void)didReconnect
+{
+    if(_reconnected != nil)
+    {
+        self.reconnected();
+    }
+    
+    if (_delegate && [_delegate respondsToSelector:@selector(SRConnectionDidReconnect:)]) 
+    {
+        [self.delegate SRConnectionDidReconnect:self];
+    }
+}
+
+- (void)addValue:(NSString *)value forHTTPHeaderField:(NSString *)field
+{
+    [_headers setValue:value forKey:field];
+}
+
 #pragma mark - 
 #pragma mark Prepare Request
 
-//TODO: handle credientials
 - (void)prepareRequest:(id)request
 {
     if([request isKindOfClass:[NSMutableURLRequest class]])
     {
-#if TARGET_IPHONE || TARGET_IPHONE_SIMULATOR
+#if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
         [request addValue:[self createUserAgentString:@"SignalR.Client.iOS"] forHTTPHeaderField:@"User-Agent"];
 #elif TARGET_OS_MAC
         [request addValue:[self createUserAgentString:@"SignalR.Client.OSX"] forHTTPHeaderField:@"User-Agent"];
 #endif
         if(_credentials != nil)
         {
-            /*[request setAuthenticationScheme:(NSString *)kCFHTTPAuthenticationSchemeBasic];
-             
-             if(_protectionSpace && [_protectionSpace isProxy])
-             {
-             [request setProxyUsername:_credentials.user];
-             [request setProxyPassword:_credentials.password];
-             }
-             else
-             {
-             [request setUsername:_credentials.user];
-             [request setPassword:_credentials.password];
-             }
-             
-             if(_protectionSpace && [_protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodNTLM])
-             {
-             if([_protectionSpace isProxy])
-             {
-             [request setProxyDomain:_protectionSpace.host];
-             }
-             else
-             {
-             [request setDomain:_protectionSpace.host];
-             }
-             [request setAuthenticationScheme:(NSString *)kCFHTTPAuthenticationSchemeNTLM];
-             }
-             
-             [request setShouldPresentCredentialsBeforeChallenge:YES];*/
+            // Create a AFHTTPClient for the sole purpose of generating an authorization header.
+            AFHTTPClient *clientForAuthHeader = [[AFHTTPClient alloc] initWithBaseURL:[NSURL URLWithString:@""]];
+            [clientForAuthHeader setAuthorizationHeaderWithUsername:_credentials.user password:_credentials.password];
+            
+            //Set the Authorization header that we just generated to our actual request
+            [request addValue:[clientForAuthHeader defaultValueForHeader:@"Authorization"] forHTTPHeaderField:@"Authorization"];
+        }
+        for(NSString *header in _headers) 
+        {
+            [request addValue:[_headers valueForKey:header] forHTTPHeaderField:header];
         }
     }
 }
@@ -322,10 +354,11 @@ void (^prepareRequest)(id);
 {
     if(_assemblyVersion == nil)
     {
-        _assemblyVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:(NSString *)kCFBundleVersionKey];
+        //Need to manually set this otherwise it will inherit from the project version
+        _assemblyVersion = @"0.4";
     }
    
-#if TARGET_IPHONE || TARGET_IPHONE_SIMULATOR
+#if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
     return [NSString stringWithFormat:@"%@/%@ (%@ %@)",client,_assemblyVersion,[[UIDevice currentDevice] localizedModel],[[UIDevice currentDevice] systemVersion]];
 #elif TARGET_OS_MAC
     NSString *environmentVersion = @"";
@@ -349,14 +382,12 @@ void (^prepareRequest)(id);
     _assemblyVersion = nil;
     _transport = nil;
     _initialized = NO;
-    _initializedCalled = 0;
     _started = nil;
     _received = nil;
     _error = nil;
     _closed = nil;
     _groups = nil;
     _credentials = nil;
-    _protectionSpace = nil;
     _sending = nil;
     _url = nil;
     _active = NO;

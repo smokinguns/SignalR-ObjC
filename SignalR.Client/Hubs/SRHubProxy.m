@@ -3,13 +3,27 @@
 //  SignalR
 //
 //  Created by Alex Billingsley on 10/31/11.
-//  Copyright (c) 2011 DyKnow LLC. All rights reserved.
+//  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+//  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+//  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all copies or substantial portions of 
+//  the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+//  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+//  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+//  DEALINGS IN THE SOFTWARE.
 //
 
 #import "SRHubProxy.h"
 #import "SRSignalRConfig.h"
 
-#import "SBJson.h"
+#import "NSObject+SRJSON.h"
 #import "SRConnection.h"
 #import "SRSubscription.h"
 #import "SRHubServerInvocation.h"
@@ -78,12 +92,21 @@
     {
         NSMethodSignature *signature = [eventObj.object methodSignatureForSelector:eventObj.selector];
         NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+        NSUInteger numberOfArguments = [signature numberOfArguments] - 2;
+        
+        if (args.count != numberOfArguments)
+        {
+#if DEBUG_SERVER_SENT_EVENTS || DEBUG_LONG_POLLING || DEBUG_HTTP_BASED_TRANSPORT
+            SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] Callback for event '%@' is configured with %d arguments, received %d parameters instead.",eventName, numberOfArguments, args.count);
+#endif            
+        }
+        
         [invocation setSelector:eventObj.selector];
         [invocation setTarget:eventObj.object];
-        for(int i =0; i<[args count]; i++)
+        for(int i =0; i< MIN([args count], numberOfArguments); i++)
         {
             int arguementIndex = 2 + i;
-            NSString *argument = [args objectAtIndex:i];
+            __unsafe_unretained NSString *argument = [args objectAtIndex:i];
             [invocation setArgument:&argument atIndex:arguementIndex];
         }
         [invocation invoke];
@@ -122,7 +145,7 @@
     hubData.data = [NSMutableArray arrayWithArray:args];
     hubData.state = _state;
     
-    NSString *value = [[SBJsonWriter new] stringWithObject:hubData];
+    NSString *value = [hubData SRJSONRepresentation];
         
     [_connection send:value continueWith:^(id response)
     {
@@ -131,12 +154,18 @@
 #endif
          if([response isKindOfClass:[NSString class]])
          {
-             SRHubResult *hubResult = [[SRHubResult alloc] initWithDictionary:[[SBJsonParser new] objectWithString:response]];
+             SRHubResult *hubResult = [[SRHubResult alloc] initWithDictionary:[response SRJSONValue]];
              if (hubResult != nil) 
              {
                  if(![hubResult.error isKindOfClass:[NSNull class]] && hubResult.error != nil)
                  {
-                     [NSException raise:@"InvalidOperationException" format:hubResult.error];
+                     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+                     [userInfo setObject:[NSString stringWithFormat:@"InvalidOperationException"] forKey:NSLocalizedFailureReasonErrorKey];
+                     [userInfo setObject:[NSString stringWithFormat:@"%@",hubResult.error] forKey:NSLocalizedDescriptionKey];
+                     NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:@"com.SignalR-ObjC.%@",NSStringFromClass([self class])] 
+                                                          code:0 
+                                                      userInfo:userInfo];
+                     [_connection didReceiveError:error];
                  }
                  
                  if(![hubResult.state isKindOfClass:[NSNull class]] && hubResult.state != nil)

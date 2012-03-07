@@ -3,13 +3,26 @@
 //  SignalR
 //
 //  Created by Alex Billingsley on 10/18/11.
-//  Copyright (c) 2011 DyKnow LLC. All rights reserved.
+//  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+//  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+//  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all copies or substantial portions of 
+//  the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+//  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+//  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+//  DEALINGS IN THE SOFTWARE.
 //
 
 #import "SRHttpHelper.h"
 #import "SRSignalRConfig.h"
 
-#import "SBJson.h"
 #import "AFNetworking.h"
 #import "NSDictionary+QueryString.h"
 
@@ -84,10 +97,10 @@ static id sharedHttpRequestManager = nil;
 
 - (void)getInternal:(NSString *)url requestPreparer:(void(^)(id))requestPreparer parameters:(id)parameters continueWith:(void (^)(id response))block
 {
-     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     [request setHTTPMethod:@"GET"];
-    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"Keep-Alive" forHTTPHeaderField:@"Connection"];
+    [request setTimeoutInterval:240];
     if(requestPreparer != nil)
     {
         requestPreparer(request);
@@ -112,6 +125,15 @@ static id sharedHttpRequestManager = nil;
     operation.outputStream = oStream;
     [operation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) 
     {
+#if DEBUG_HTTP_HELPER
+        NSString *debugOutput = [NSString stringWithFormat:@"Request (%@ %@) was successful\n",operation.request.HTTPMethod,[operation.request.URL absoluteString]];
+        debugOutput = [debugOutput stringByAppendingFormat:@"RESPONSE=%@ \n",operation.responseString];
+        SR_DEBUG_LOG(@"[HTTPHELPER] %@",debugOutput);
+#endif
+        if (block)
+        {
+            block(responseObject);
+        }
     } failure:^(AFHTTPRequestOperation *operation, NSError *error) 
     {
 #if DEBUG_HTTP_HELPER
@@ -154,12 +176,13 @@ static id sharedHttpRequestManager = nil;
 {
     NSData *requestData = [[postData stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
     
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url] cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:20];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     [request setHTTPMethod:@"POST"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
     [request setValue:[NSString stringWithFormat:@"%d", [requestData length]] forHTTPHeaderField:@"Content-Length"];
     [request setHTTPBody: requestData];
+    [request setTimeoutInterval:240];
     if(requestPreparer != nil)
     {
         requestPreparer(request);

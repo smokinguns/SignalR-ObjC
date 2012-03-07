@@ -26,8 +26,7 @@ NOTE: SignalR-ObjC uses Automatic Reference Counting.
 1. Build and Run your project with no errors
 
 ### Method 2:
-Open the [SignalR.Framework XCode Project](https://github.com/DyKnow/SignalR-ObjC/tree/master/Xcode/SignalR.Framework) 
-
+1. Open the [SignalR.Framework XCode Project](https://github.com/DyKnow/SignalR-ObjC/tree/master/Xcode/SignalR.Framework) 
 1. Choose the appropriate build target SignalR-iOS or SignalR-OSX
 1. Verify that the Project's Base SDK setting under Build Settings is correct, Latest iOS for the iOS target, Latest Mac OS for the mac target
 1. Run the target
@@ -37,6 +36,18 @@ Open the [SignalR.Framework XCode Project](https://github.com/DyKnow/SignalR-Obj
 1. In your pch file or where every you intend to use SignalR ```#import <SignalR-iOS/SignalR.h>``` or ```#import <SignalR-OSX/SignalR.h>```
 1. Build and Run your project with no errors
 
+## Requirements
+
+SignalR-ObjC uses [`NSJSONSerialization`](http://developer.apple.com/library/mac/#documentation/Foundation/Reference/NSJSONSerialization_Class/Reference/Reference.html) if it is available. You can include one of the following JSON libraries to your project for SignalR-ObjC to automatically detect and use.
+
+* [JSONKit](https://github.com/johnezang/JSONKit)
+* [SBJson](http://stig.github.com/json-framework/)
+* [YAJL](http://lloyd.github.com/yajl/)
+
+### ARC Support
+
+SignalR-ObjC requires ARC
+
 ## LICENSE
 [MIT License](https://github.com/DyKnow/SignalR-ObjC/blob/master/LICENSE.md)
 
@@ -44,4 +55,5 @@ SignalR-ObjC uses 3rd-party code, see [ACKNOWLEDGEMENTS](https://github.com/DyKn
 [Vendor](https://github.com/DyKnow/SignalR-ObjC/tree/master/Vendor) for specific usage
 
 ## Questions?
-The SignalR team hangs out in the **signalr** room at http://jabbr.net.
+- The SignalR team hangs out in the **signalr** room at http://jabbr.net/
+- The SignalR-ObjC team hangs out in the **signalr-objc** room at http://jabbr.net/

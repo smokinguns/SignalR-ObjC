@@ -3,13 +3,27 @@
 //  SignalR
 //
 //  Created by Alex Billingsley on 1/7/12.
-//  Copyright (c) 2012 DyKnow LLC. All rights reserved.
+//  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+//  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+//  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all copies or substantial portions of 
+//  the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+//  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+//  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+//  DEALINGS IN THE SOFTWARE.
 //
 
 #import "SRHttpBasedTransport.h"
 #import "SRSignalRConfig.h"
 
-#import "SBJson.h"
+#import "NSObject+SRJSON.h"
 #import "AFNetworking.h"
 #import "SRHttpHelper.h"
 #import "SRConnection.h"
@@ -148,14 +162,7 @@
         [parameters setObject:[NSString stringWithFormat:@""] forKey:kMessageId];
     }
     
-    if([connection.groups count]>0)
-    {
-        [parameters setObject:[connection.groups componentsJoinedByString:@","] forKey:kGroups];
-    }
-    else
-    {
-        [parameters setObject:[NSString stringWithFormat:@""] forKey:kGroups];
-    }
+    [parameters setObject:[connection.groups SRJSONRepresentation] forKey:kGroups];
     
     if (data) 
     {
@@ -180,7 +187,7 @@
 
 - (void)prepareRequest:(id)request forConnection:(SRConnection *)connection;
 {
-    //Setup the user agent alogn with and other defaults
+    //Setup the user agent along with and other defaults
     [connection prepareRequest:request];
     
     if([request isKindOfClass:[AFHTTPRequestOperation class]])
@@ -194,8 +201,16 @@
     //override this method
 }
 
-- (void)onMessage:(SRConnection *)connection response:(NSString *)response
+- (void)processResponse:(SRConnection *)connection response:(NSString *)response timedOut:(BOOL *)timedOut disconnected:(BOOL *)disconnected
 {
+    *timedOut = NO;
+    *disconnected = NO;
+    
+    if(response == nil || [response isEqualToString:@""])
+    {
+        return;
+    }
+    
     if(connection.messageId == nil)
     {
         connection.messageId = [NSNumber numberWithInt:0];
@@ -203,13 +218,21 @@
     
     @try 
     {
-        id result = [[SBJsonParser new] objectWithString:response];
+        id result = [response SRJSONValue];
         if([result isKindOfClass:[NSDictionary class]])
         {
-            id messageId = [result objectForKey:kResponse_MessageId];
-            if(messageId && [messageId isKindOfClass:[NSNumber class]])
+            *timedOut = [[result objectForKey:kResponse_TimedOut] boolValue];
+            *disconnected = [[result objectForKey:kResponse_Disconnected] boolValue];
+            
+            if(*disconnected)
             {
-                connection.messageId = messageId;
+                return;
+            }
+            
+            NSInteger messageId = [[result objectForKey:kResponse_MessageId] integerValue];
+            if(messageId)
+            {
+                connection.messageId = [NSNumber numberWithInteger:messageId];
             }
             
             id messageData = [result objectForKey:kResponse_Messages];
@@ -219,7 +242,7 @@
                 {   
                     if([message isKindOfClass:[NSDictionary class]])
                     {
-                        [connection didReceiveData:[[SBJsonWriter new] stringWithObject:message]];
+                        [connection didReceiveData:[message SRJSONRepresentation]];
                     }
                     else if([message isKindOfClass:[NSString class]])
                     {
@@ -234,10 +257,7 @@
                 id groups = [transportData objectForKey:kResponse_Groups];
                 if(groups && [groups isKindOfClass:[NSArray class]])
                 {
-                    for (NSString *group in groups) 
-                    {
-                        [connection.groups addObject:group];
-                    }
+                    connection.groups = [NSMutableArray arrayWithArray:groups];
                 }
             }
         }
