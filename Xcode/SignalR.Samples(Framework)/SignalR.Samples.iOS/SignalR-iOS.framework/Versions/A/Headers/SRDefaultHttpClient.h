@@ -1,8 +1,8 @@
 //
-//  SRHubRegistrationData.m
-//  SignalR
+//  DefaultHttpClient.h
+//  SignalR.Samples
 //
-//  Created by Alex Billingsley on 11/2/11.
+//  Created by Alex Billingsley on 3/23/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,59 +20,9 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHubRegistrationData.h"
+#import <Foundation/Foundation.h>
+#import "SRHttpClient.h"
 
-@interface SRHubRegistrationData ()
-
-#define kName @"name"
-#define kMethods @"methods"
-
-@end
-
-@implementation SRHubRegistrationData
-
-@synthesize name = _name;
-
-- (id) init
-{
-    if (self = [super init])
-    {
-        _name = [NSString stringWithFormat:@""];
-    }
-    return self;
-}
-
-- (id)initWithDictionary:(NSDictionary*)dict
-{
-	if (self = [self init])
-	{
-        self.name  = [NSString stringWithFormat:@"%@",[dict objectForKey:kName]];
-    }
-    return self;
-}
-
-- (void)updateWithDictionary:(NSDictionary *)dict
-{
-    self.name = ([dict objectForKey:kName]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kName]] : _name;
-}
-
-- (id)proxyForJson
-{
-    NSMutableDictionary* dict = [[NSMutableDictionary alloc] init];
-    
-    [dict setObject:[NSString stringWithFormat:@"%@",_name] forKey:kName];
-    
-    return dict;
-}
-
-- (NSString *)description 
-{     
-    return [NSString stringWithFormat:@"HubRegistrationData: Name=%@",_name];
-}
-
-- (void)dealloc
-{
-    _name = nil;
-}
+@interface SRDefaultHttpClient : NSObject <SRHttpClient>
 
 @end

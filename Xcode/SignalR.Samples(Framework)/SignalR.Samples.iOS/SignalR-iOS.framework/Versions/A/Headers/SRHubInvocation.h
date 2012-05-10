@@ -1,5 +1,5 @@
 //
-//  SRHubClientInvocation.h
+//  SRHubInvocation.h
 //  SignalR
 //
 //  Created by Alex Billingsley on 11/7/11.
@@ -23,9 +23,9 @@
 #import <Foundation/Foundation.h>
 
 /**
- * An `SRHubClientInvocation` object defines the interface for invoking methods on the SignalR Client using a Hubs implementation
+ * An `SRHubInvocation` object defines the interface for invoking methods on the SignalR Client using a Hubs implementation
  */
-@interface SRHubClientInvocation : NSObject
+@interface SRHubInvocation : NSObject
 
 ///-------------------------------
 /// @name Properties
@@ -53,24 +53,24 @@
 
 
 ///-------------------------------
-/// @name Initializing an SRHubClientInvocation Object
+/// @name Initializing an SRHubInvocation Object
 ///-------------------------------
 
 /**
- * Initializes a new `SRHubClientInvocation` from a `NSDictionary` object deserialized from a JSON server response
+ * Initializes a new `SRHubInvocation` from a `NSDictionary` object deserialized from a JSON server response
  *
- * @param dict a dictionary representing an `SRHubClientInvocation`
+ * @param dict a dictionary representing an `SRHubInvocation`
  */
 - (id)initWithDictionary:(NSDictionary*)dict;
 
 ///-------------------------------
-/// @name Updating an SRHubClientInvocation Object
+/// @name Updating an SRHubInvocation Object
 ///-------------------------------
 
 /**
- * Updates a new `SRHubClientInvocation` from a `NSDictionary` object deserialized from a JSON server response
+ * Updates a new `SRHubInvocation` from a `NSDictionary` object deserialized from a JSON server response
  *
- * @param dict a dictionary representing an `SRHubClientInvocation`
+ * @param dict a dictionary representing an `SRHubInvocation`
  */
 - (void)updateWithDictionary:(NSDictionary *)dict;
 
@@ -79,7 +79,7 @@
 ///-------------------------------
 
 /**
- * Conforms to SBJson (aka json-framework) allowing `SRHubClientInvocation` to be serialized to JSON
+ * Conforms to SBJson (aka json-framework) allowing `SRHubInvocation` to be serialized to JSON
  */
 - (id)proxyForJson;
 
