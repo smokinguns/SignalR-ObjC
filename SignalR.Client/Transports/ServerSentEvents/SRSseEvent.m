@@ -1,8 +1,8 @@
 //
-//  SRHubservable.m
+//  SRSseEvent.m
 //  SignalR
 //
-//  Created by Alex Billingsley on 11/4/11.
+//  Created by Alex Billingsley on 6/8/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,55 +20,56 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHubProxy.h"
-#import "SRHubservable.h"
-#import "SRSubscription.h"
+#import "SRSseEvent.h"
 
-@interface SRHubservable ()
+@interface SRSseEvent ()
 
 @end
 
-@implementation SRHubservable
+@implementation SRSseEvent
 
-@synthesize proxy = _proxy;
-@synthesize eventName = _eventName;
+@synthesize type = _type;
+@synthesize data = _data;
 
-#pragma mark - 
-#pragma mark Initialization
-
-+ (id)observe:(SRHubProxy *)proxy event:(NSString *)eventName
+- (id)initWithType:(EventType)type data:(NSString *)data
 {
-    return [[SRHubservable alloc] initWithProxy:proxy eventName:eventName];
-}
-
-- (id)initWithProxy:(SRHubProxy *)proxy eventName:(NSString *)eventName
-{
-    if (self = [super init]) 
+    if (self = [super init])
     {
-        _proxy = proxy;
-        _eventName = eventName;
+        _type = type;
+        _data = data;
     }
     return self;
 }
 
-- (SRSubscription *)subscribe:(NSObject *)object selector:(SEL)selector
+- (NSString *)description
 {
-    SRSubscription *subscription = [_proxy subscribe:_eventName];
-    subscription.object = object;
-    subscription.selector = selector;
-    
-    return subscription;
+    return [NSString stringWithFormat:@"%d: %@",_type,_data];
 }
 
-- (NSString *)description 
-{  
-    return [NSString stringWithFormat:@"Hubservable: Hub:%@ Event=%@",_proxy, _eventName];
++ (BOOL)tryParseEvent:(NSString *)line sseEvent:(SRSseEvent **)sseEvent
+{
+    *sseEvent = nil;
+    
+    if([line hasPrefix:@"data:"])
+    {
+        NSString *data = [[line substringFromIndex:@"data:".length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        *sseEvent = [[SRSseEvent alloc] initWithType:Data data:data];
+        return YES;
+    }
+    else if([line hasPrefix:@"id:"])
+    {
+        
+        NSString *data = [line substringFromIndex:@"id:".length];
+        *sseEvent = [[SRSseEvent alloc] initWithType:Id data:data];
+        return YES;
+    }
+    
+    return NO;
 }
 
 - (void)dealloc
 {
-    _proxy = nil;
-    _eventName = nil;
+    _data = nil;
 }
 
 @end

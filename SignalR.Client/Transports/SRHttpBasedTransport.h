@@ -23,10 +23,9 @@
 #import <Foundation/Foundation.h>
 #import "SRClientTransport+Constants.h"
 #import "SRHttpClient.h"
+#import "SRRequest.h"
 
-#if NS_BLOCKS_AVAILABLE
 typedef void (^SRErrorByReferenceBlock)(NSError **);
-#endif
 
 /**
  * `SRHttpBasedTransport` is an abstract class intended to be subclassed. It publishes a programmatic interface that all subclasses must adopt and provide implementations for.
@@ -60,7 +59,7 @@ typedef void (^SRErrorByReferenceBlock)(NSError **);
  */
 - (id) initWithHttpClient:(id <SRHttpClient>)httpClient transport:(NSString *)transport;
 
-+ (void)getNegotiationResponse:(id <SRHttpClient>)httpClient connection:(SRConnection *)connection continueWith:(void (^)(id))block;
++ (void)getNegotiationResponse:(id <SRHttpClient>)httpClient connection:(SRConnection *)connection continueWith:(void (^)(SRNegotiationResponse *response))block;
 
 /**
  * @warning *Important:* this method should only be called from a subclass of `SRHttpBasedTransport` 
@@ -79,14 +78,10 @@ typedef void (^SRErrorByReferenceBlock)(NSError **);
 /**
  * Prepares http requests to be sent to the server
  * 
- * if the request is an `NSMutableURLRequest`, [SRConneciton prepareRequest] is called
- * if the request is an `AFHTTPRequestOperation the request object is stored in SRConnection.items as a value for the key kHttpRequest
- * the `AFHTTPRequestOperation` is stored so it can be easily retreived when the `SRHttpBasedTransport` is stopped and the underlying request cancelled
- *
- * @param request will either be an `NSMutableURLRequest` or an `AFHTTPRequestOperation`
+ * @param request id <SRRequest> associated with the request
  * @param connection the `SRConnection` object that initialized the `SRHttpBasedTransport`
  */
-- (void)prepareRequest:(id)request forConnection:(SRConnection *)connection;
+- (void)prepareRequest:(id <SRRequest>)request forConnection:(SRConnection *)connection;
 
 /**
  * Generates a query string for request made to receive data from the server
@@ -104,14 +99,6 @@ typedef void (^SRErrorByReferenceBlock)(NSError **);
  * @return an URL encoded `NSString` object of the form ?transport=<transportname>&connectionId=<connectionId><customquerystring>
  */
 - (NSString *)getSendQueryString:(SRConnection *)connection;
-
-/**
- * Performs a check to see if the underlying HTTP request was cancelled
- *
- * @param error an error returned from the underlying HTTP request `SRHttpHelper`
- * @return YES if the request was aborted, NO if not
- */
-- (BOOL)isRequestAborted:(NSError *)error;
 
 /**
  * Subclasses of `SRHttpBasedTransport` should override this method if the `SRHttpBasedTransport` needs to perform cleanup before closing

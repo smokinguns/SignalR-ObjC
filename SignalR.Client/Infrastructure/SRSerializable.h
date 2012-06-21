@@ -1,8 +1,8 @@
 //
-//  SRHubservable.m
+//  SRSerializable.h
 //  SignalR
 //
-//  Created by Alex Billingsley on 11/4/11.
+//  Created by Alex Billingsley on 6/6/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,55 +20,34 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHubProxy.h"
-#import "SRHubservable.h"
-#import "SRSubscription.h"
+#import <Foundation/Foundation.h>
 
-@interface SRHubservable ()
+/**
+ * An `SRSerializable` defines the protocol that should be enforced if an NSObject is intended to be sent to a transport
+ *
+ * It should be noted that while all functions are optional at least one should be used for auto detected JSON serialization to work properly
+ */
+@protocol SRSerializable <NSObject>
 
-@end
+@optional
 
-@implementation SRHubservable
+///-------------------------------
+/// @name JSON Serialization
+///-------------------------------
 
-@synthesize proxy = _proxy;
-@synthesize eventName = _eventName;
+/**
+ * Conforms to SBJson (aka json-framework) allowing `NSObjects` to be serialized to JSON
+ */
+- (id) proxyForJson;
 
-#pragma mark - 
-#pragma mark Initialization
+/**
+ * Conforms to YAJL allowing `NSObjects` to be serialized to JSON
+ */
+- (id) JSON;
 
-+ (id)observe:(SRHubProxy *)proxy event:(NSString *)eventName
-{
-    return [[SRHubservable alloc] initWithProxy:proxy eventName:eventName];
-}
-
-- (id)initWithProxy:(SRHubProxy *)proxy eventName:(NSString *)eventName
-{
-    if (self = [super init]) 
-    {
-        _proxy = proxy;
-        _eventName = eventName;
-    }
-    return self;
-}
-
-- (SRSubscription *)subscribe:(NSObject *)object selector:(SEL)selector
-{
-    SRSubscription *subscription = [_proxy subscribe:_eventName];
-    subscription.object = object;
-    subscription.selector = selector;
-    
-    return subscription;
-}
-
-- (NSString *)description 
-{  
-    return [NSString stringWithFormat:@"Hubservable: Hub:%@ Event=%@",_proxy, _eventName];
-}
-
-- (void)dealloc
-{
-    _proxy = nil;
-    _eventName = nil;
-}
+/**
+ * Conforms to NXJSON allowing `NSObjects` to be serialized to JSON
+ */
+- (id) serialize;
 
 @end

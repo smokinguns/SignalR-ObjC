@@ -22,22 +22,17 @@
 
 #import <Foundation/Foundation.h>
 
-/**
- * `SRHttpHelper` is an object used to create HttpRequest objects that are configured for the various http request methods (GET, PUT etc)
- */
-@interface SRHttpHelper : NSObject
-
-///-------------------------------
-/// @name Initialization
-///-------------------------------
+typedef void (^SRPrepareRequestBlock)(id request);
+typedef void (^SRContinueWithBlock)(id response);
 
 /**
- * Initializes a Singleton for `SRHttpHelper` 
+ * `SRHttpHelper` defines a protocol used to create HttpRequest objects that are configured for the various http request methods (GET, PUT etc)
  */
-+ (id)sharedHttpRequestManager;
+@protocol SRHttpHelper <NSObject>
 
 #pragma mark -
 #pragma mark GET Requests
+
 ///-------------------------------
 /// @name GET Requests
 ///-------------------------------
@@ -48,7 +43,7 @@
  * @param url The url relative to the server endpoint
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)getAsync:(NSString *)url continueWith:(void (^)(id response))block;
++ (void)getAsync:(NSString *)url continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a GET request with the specified url returns on the given block
@@ -58,31 +53,32 @@
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer continueWith:(void (^)(id response))block;
++ (void)getAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a GET request with the specified url returns on the given block
  *
  * @param url The url relative to the server endpoint
- * @param parameters An Object that conforms to proxyForJSON to pass as parameters to the endpoint
+ * @param parameters An Object that conforms to SRSerializable to pass as parameters to the endpoint
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)getAsync:(NSString *)url parameters:(id)parameters continueWith:(void (^)(id response))block;
++ (void)getAsync:(NSString *)url parameters:(id)parameters continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a GET request with the specified url returns on the given block
  *
  * @param url The url relative to the server endpoint
- * @param parameters An Object that conforms to proxyForJSON to pass as parameters to the endpoint
+ * @param parameters An Object that conforms to SRSerializable to pass as parameters to the endpoint
  * @param requestPreparer A function to be called on the NSMutableURLRequest created for the request
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer parameters:(id)parameters continueWith:(void (^)(id response))block;
++ (void)getAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer parameters:(id)parameters continueWith:(SRContinueWithBlock)block;
 
 #pragma mark -
 #pragma mark POST Requests
+
 ///-------------------------------
 /// @name POST Requests
 ///-------------------------------
@@ -94,7 +90,7 @@
  * @param url The url relative to the server endpoint
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)postAsync:(NSString *)url continueWith:(void (^)(id response))block;
++ (void)postAsync:(NSString *)url continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a POST request with the specified url returns on the given block
@@ -105,28 +101,28 @@
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer continueWith:(void (^)(id response))block;
++ (void)postAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a POST request with the specified url and payload returns on the given block
  * This POST will have a payload that is generated from @postData
  *
  * @param url The url relative to the server endpoint
- * @param postData An Object that conforms to proxyForJSON to post at the url
+ * @param postData An Object that conforms to SRSerializable to post at the url
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)postAsync:(NSString *)url postData:(id)postData continueWith:(void (^)(id response))block;
++ (void)postAsync:(NSString *)url postData:(id)postData continueWith:(SRContinueWithBlock)block;
 
 /**
  * Creates a POST request with the specified url and payload returns on the given block
  * This POST will have a payload that is generated from @postData
  *
  * @param url The url relative to the server endpoint
- * @param postData An Object that conforms to proxyForJSON to post at the url
+ * @param postData An Object that conforms to SRSerializable to post at the url
  * @param requestPreparer A function to be called on the NSMutableURLRequest created for the request
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-+ (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer postData:(id)postData continueWith:(void (^)(id response))block;
++ (void)postAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer postData:(id)postData continueWith:(SRContinueWithBlock)block;
 
 @end

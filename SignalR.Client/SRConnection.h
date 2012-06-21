@@ -22,7 +22,9 @@
 
 #import <Foundation/Foundation.h>
 #import "SRClientTransport.h"
+#import "SRConnectionState.h"
 #import "SRHttpClient.h"
+#import "SRRequest.h"
 
 @class SRConnection;
 
@@ -73,14 +75,12 @@
 
 @end
 
-#if NS_BLOCKS_AVAILABLE
 typedef void (^onStarted)();
 typedef NSString* (^onSending)();
 typedef void (^onReceived)(NSString *);
 typedef void (^onError)(NSError *);
 typedef void (^onClosed)();
 typedef void (^onReconnected)();
-#endif
 
 /**
  * An `SRConnection` object provides support to open a persistent connection with a SignalR Server.
@@ -140,12 +140,6 @@ typedef void (^onReconnected)();
 @property (strong, nonatomic, readwrite) NSString *url;
 
 /**
- * A `BOOL` representing the status of the connection
- * when TRUE the connection has been started
- */
-@property (assign, nonatomic, readonly, getter=isActive) BOOL active;
-
-/**
  * An `NSNumber` representing the current message id 
  */
 @property (strong, nonatomic, readwrite) NSNumber *messageId;
@@ -165,11 +159,7 @@ typedef void (^onReconnected)();
  */
 @property (strong, nonatomic, readonly) NSString *queryString;
 
-/**
- * A `BOOL` representing the status of the connection underlying transport
- * when TRUE the connection's underlying transport has been started
- */
-@property (assign, nonatomic, readonly) BOOL initialized;
+@property (assign, nonatomic, readwrite) connectionState state;
 
 /**
  * An `NSMutableDictionary` representing the headers to be applied to each request 
@@ -358,9 +348,9 @@ typedef void (^onReconnected)();
 /**
  * Sets the user agent, crediential information and other relevant header values on each connection
  *
- * @param request The `NSMutableURLRequest` that will be sent to the server
+ * @param request The `id <SRRequest>` that will be sent to the server
  */
-- (void)prepareRequest:(id)request;
+- (void)prepareRequest:(id <SRRequest>)request;
 
 /**
  * Generates the client UserAgent header field

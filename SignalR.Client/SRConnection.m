@@ -21,22 +21,21 @@
 //
 
 #include <TargetConditionals.h>
-#import "SRConnection.h"
-#import "SRSignalRConfig.h"
-
-#import "AFNetworking.h"
-#import "NSObject+SRJSON.h"
-#import "SRDefaultHttpClient.h"
 #import "SRAutoTransport.h"
+#import "SRConnection.h"
+#import "SRConnectionExtensions.h"
+#import "SRDefaultHttpClient.h"
 #import "SRNegotiationResponse.h"
+#import "SRSignalRConfig.h"
 #import "SRVersion.h"
+
 #import "NSDictionary+QueryString.h"
 
 void (^prepareRequest)(id);
 
 @interface SRConnection ()
 
-@property (strong, nonatomic, readonly) NSString *assemblyVersion;
+@property (strong, nonatomic, readonly) SRVersion *assemblyVersion;
 @property (strong, nonatomic, readonly) id <SRClientTransport> transport;
 
 - (void)verifyProtocolVersion:(NSString *)versionString;
@@ -59,12 +58,11 @@ void (^prepareRequest)(id);
 @synthesize credentials = _credentials;
 @synthesize sending = _sending;
 @synthesize url = _url;
-@synthesize active = _active;
 @synthesize messageId = _messageId;
 @synthesize connectionId = _connectionId;
 @synthesize items = _items;
 @synthesize queryString = _queryString;
-@synthesize initialized = _initialized;
+@synthesize state = _state;
 @synthesize headers = _headers;
 
 @synthesize delegate = _delegate;
@@ -104,7 +102,7 @@ void (^prepareRequest)(id);
         NSRange range = [queryString rangeOfString:@"?" options:NSCaseInsensitiveSearch];
         if(range.location != NSNotFound) 
         {
-            [NSException raise:@"ArgumentException" format:@"Url cannot contain QueryString directly. Pass QueryString values in using available overload."];
+            [NSException raise:NSInvalidArgumentException format:NSLocalizedString(@"Url cannot contain QueryString directly. Pass QueryString values in using available overload.",@"")];
         }
         
         if([url hasSuffix:@"/"] == false){
@@ -116,6 +114,7 @@ void (^prepareRequest)(id);
         _groups = [[NSMutableArray alloc] init];
         _items = [NSMutableDictionary dictionary];
         _headers = [NSMutableDictionary dictionary];
+        _state = disconnected;
     }
     return self;
 }
@@ -136,12 +135,12 @@ void (^prepareRequest)(id);
 
 - (void)start:(id <SRClientTransport>)transport
 {
-    if (self.isActive)
+    if ([self isActive])
     {
         return;
     }
     
-    _active = YES;
+    _state = connecting;
         
     _transport = transport;
     
@@ -150,13 +149,6 @@ void (^prepareRequest)(id);
 
 - (void)negotiate:(id<SRClientTransport>)transport
 {
-    NSString *data = nil;
-    
-    if(_sending != nil)
-    {
-        data = self.sending();
-    }
-        
 #if DEBUG_CONNECTION
     SR_DEBUG_LOG(@"[CONNECTION] will negotiate");
 #endif
@@ -172,10 +164,17 @@ void (^prepareRequest)(id);
         {
             _connectionId = negotiationResponse.connectionId;
             
+            NSString *data = nil;
+            
+            if(_sending != nil)
+            {
+                data = self.sending();
+            }
+            
             [_transport start:self withData:data continueWith:
              ^(id task) 
             {
-                _initialized = YES;
+                _state = connected;
                  
                 if(_started != nil)
                 {
@@ -196,7 +195,7 @@ void (^prepareRequest)(id);
        ![SRVersion tryParse:versionString forVersion:&version] ||
        !(version.major == 1 && version.minor == 0))
     {
-        [NSException raise:@"InvalidOperationException" format:@"Incompatible Protocol Version"];
+        [NSException raise:NSInternalInconsistencyException format:NSLocalizedString(@"Incompatible Protocol Version",@"NSInternalInconsistencyException")];
     }
 }
 
@@ -204,11 +203,13 @@ void (^prepareRequest)(id);
 {
     @try 
     {
-        // Do nothing if the connection was never started
-        if (!_initialized)
+        // Do nothing if the connection is offline
+        if ([self isDisconnecting])
         {
             return;
         }
+        
+        _state = disconnecting;
         
         [_transport stop:self];
         
@@ -224,8 +225,7 @@ void (^prepareRequest)(id);
     }
     @finally 
     {
-        _active = NO;
-        _initialized = NO;
+        _state = disconnected;
     }
 }
 
@@ -239,12 +239,12 @@ void (^prepareRequest)(id);
 
 - (void)send:(NSString *)message continueWith:(void (^)(id response))block
 {
-    if (!_initialized)
+    if ([self isDisconnecting])
     {
         NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-        [userInfo setObject:[NSString stringWithFormat:@"InvalidOperationException"] forKey:NSLocalizedFailureReasonErrorKey];
-        [userInfo setObject:[NSString stringWithFormat:@"Start must be called before data can be sent"] forKey:NSLocalizedDescriptionKey];
-        NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:@"com.SignalR-ObjC.%@",NSStringFromClass([self class])] 
+        [userInfo setObject:NSInternalInconsistencyException forKey:NSLocalizedFailureReasonErrorKey];
+        [userInfo setObject:[NSString stringWithFormat:NSLocalizedString(@"Start must be called before data can be sent",@"NSInternalInconsistencyException")] forKey:NSLocalizedDescriptionKey];
+        NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:NSLocalizedString(@"com.SignalR-ObjC.%@",@""),NSStringFromClass([self class])] 
                                              code:0 
                                          userInfo:userInfo];
         [self didReceiveError:error];
@@ -303,37 +303,24 @@ void (^prepareRequest)(id);
 #pragma mark - 
 #pragma mark Prepare Request
 
-- (void)prepareRequest:(id)request
+- (void)prepareRequest:(id <SRRequest>)request
 {
-    if([request isKindOfClass:[NSMutableURLRequest class]])
-    {
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
-        [request addValue:[self createUserAgentString:@"SignalR.Client.iOS"] forHTTPHeaderField:@"User-Agent"];
+    [request setUserAgent:[self createUserAgentString:NSLocalizedString(@"SignalR.Client.iOS",@"")]];
 #elif TARGET_OS_MAC
-        [request addValue:[self createUserAgentString:@"SignalR.Client.OSX"] forHTTPHeaderField:@"User-Agent"];
+    [request setUserAgent:[self createUserAgentString:NSLocalizedString(@"SignalR.Client.OSX",@"")]];
 #endif
-        if(_credentials != nil)
-        {
-            // Create a AFHTTPClient for the sole purpose of generating an authorization header.
-            AFHTTPClient *clientForAuthHeader = [[AFHTTPClient alloc] initWithBaseURL:[NSURL URLWithString:@""]];
-            [clientForAuthHeader setAuthorizationHeaderWithUsername:_credentials.user password:_credentials.password];
-            
-            //Set the Authorization header that we just generated to our actual request
-            [request addValue:[clientForAuthHeader defaultValueForHeader:@"Authorization"] forHTTPHeaderField:@"Authorization"];
-        }
-        for(NSString *header in _headers) 
-        {
-            [request addValue:[_headers valueForKey:header] forHTTPHeaderField:header];
-        }
-    }
+    
+    [request setCredentials:_credentials];
+    
+    [request setHeaders:_headers];
 }
 
 - (NSString *)createUserAgentString:(NSString *)client
 {
     if(_assemblyVersion == nil)
     {
-        //Need to manually set this otherwise it will inherit from the project version
-        _assemblyVersion = @"0.4";
+        _assemblyVersion = [[SRVersion alloc] initWithMajor:0 minor:5 build:1 revision:0];
     }
    
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
@@ -359,7 +346,6 @@ void (^prepareRequest)(id);
     //private
     _assemblyVersion = nil;
     _transport = nil;
-    _initialized = NO;
     _started = nil;
     _received = nil;
     _error = nil;
@@ -368,11 +354,11 @@ void (^prepareRequest)(id);
     _credentials = nil;
     _sending = nil;
     _url = nil;
-    _active = NO;
     _messageId = nil;
     _connectionId = nil;
     _items = nil;
     _queryString = nil;
+    _headers = nil;
     _delegate = nil;
 }
 

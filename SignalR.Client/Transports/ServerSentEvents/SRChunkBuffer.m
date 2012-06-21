@@ -1,8 +1,8 @@
 //
-//  SRHubservable.m
+//  SRChunkBuffer.m
 //  SignalR
 //
-//  Created by Alex Billingsley on 11/4/11.
+//  Created by Alex Billingsley on 6/8/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,55 +20,63 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHubProxy.h"
-#import "SRHubservable.h"
-#import "SRSubscription.h"
+#import "SRChunkBuffer.h"
 
-@interface SRHubservable ()
+@interface SRChunkBuffer ()
 
 @end
 
-@implementation SRHubservable
+@implementation SRChunkBuffer
 
-@synthesize proxy = _proxy;
-@synthesize eventName = _eventName;
+@synthesize offset = _offset;
+@synthesize buffer = _buffer;
+@synthesize lineBuilder = _lineBuilder;
 
-#pragma mark - 
-#pragma mark Initialization
-
-+ (id)observe:(SRHubProxy *)proxy event:(NSString *)eventName
+- (id)init
 {
-    return [[SRHubservable alloc] initWithProxy:proxy eventName:eventName];
-}
-
-- (id)initWithProxy:(SRHubProxy *)proxy eventName:(NSString *)eventName
-{
-    if (self = [super init]) 
+    if (self = [super init])
     {
-        _proxy = proxy;
-        _eventName = eventName;
+        _buffer = [NSMutableString string];
+        _lineBuilder = [NSMutableString string];
     }
     return self;
 }
 
-- (SRSubscription *)subscribe:(NSObject *)object selector:(SEL)selector
+- (BOOL)hasChunks
 {
-    SRSubscription *subscription = [_proxy subscribe:_eventName];
-    subscription.object = object;
-    subscription.selector = selector;
-    
-    return subscription;
+    return (_offset < [_buffer length]);
 }
 
-- (NSString *)description 
-{  
-    return [NSString stringWithFormat:@"Hubservable: Hub:%@ Event=%@",_proxy, _eventName];
+- (void)add:(NSData *)buffer length:(int)length
+{
+    [_buffer appendString:[[NSString alloc] initWithData:buffer encoding:NSUTF8StringEncoding]];
+}
+
+- (NSString *)readLine
+{
+    for (int i = _offset; i < [_buffer length]; i++, _offset++)
+    {
+        if ([_buffer characterAtIndex:i] == '\n')
+        {
+            [_buffer deleteCharactersInRange:NSMakeRange(0, _offset + 1)];
+            NSString *line = [NSString stringWithString:_lineBuilder];
+            
+            [_lineBuilder setString:@""];
+            _offset = 0;
+            
+            return line;
+        }
+        [_lineBuilder appendFormat:@"%C",[_buffer characterAtIndex:i]];        
+    }
+    
+    return nil;
 }
 
 - (void)dealloc
 {
-    _proxy = nil;
-    _eventName = nil;
+    _offset = 0;
+    _buffer = nil;
+    _lineBuilder = nil;
 }
 
 @end

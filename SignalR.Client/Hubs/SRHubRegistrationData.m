@@ -24,14 +24,13 @@
 
 @interface SRHubRegistrationData ()
 
-#define kName @"name"
-#define kMethods @"methods"
-
 @end
 
 @implementation SRHubRegistrationData
 
 @synthesize name = _name;
+
+static NSString * const kName = @"name";
 
 - (id) init
 {
@@ -40,20 +39,6 @@
         _name = [NSString stringWithFormat:@""];
     }
     return self;
-}
-
-- (id)initWithDictionary:(NSDictionary*)dict
-{
-	if (self = [self init])
-	{
-        self.name  = [NSString stringWithFormat:@"%@",[dict objectForKey:kName]];
-    }
-    return self;
-}
-
-- (void)updateWithDictionary:(NSDictionary *)dict
-{
-    self.name = ([dict objectForKey:kName]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kName]] : _name;
 }
 
 - (id)proxyForJson

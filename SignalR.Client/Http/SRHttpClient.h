@@ -1,6 +1,6 @@
 //
 //  SRHttpClient.h
-//  SignalR.Samples
+//  SignalR
 //
 //  Created by Alex Billingsley on 3/23/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
@@ -21,12 +21,17 @@
 //
 
 #import <Foundation/Foundation.h>
+#import "SRRequest.h"
+#import "SRResponse.h"
+
+typedef void (^SRRequestBlock)(id <SRRequest> request);
+typedef void (^SRResponseBlock)(id <SRResponse> response);
 
 @protocol SRHttpClient <NSObject>
 
-- (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest continueWith:(void (^)(id response))block;
+- (void)getAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest continueWith:(SRResponseBlock)block;
 
-- (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest continueWith:(void (^)(id response))block;
-- (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest postData:(id)postData continueWith:(void (^)(id response))block;
+- (void)postAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest continueWith:(SRResponseBlock)block;
+- (void)postAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest postData:(id)postData continueWith:(SRResponseBlock)block;
 
 @end

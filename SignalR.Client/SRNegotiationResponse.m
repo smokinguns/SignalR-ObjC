@@ -24,10 +24,6 @@
 
 @interface SRNegotiationResponse ()
 
-#define kConnectionId @"ConnectionId"
-#define kUrl @"Url"
-#define kProtocolVersion @"ProtocolVersion"
-
 @end
 
 @implementation SRNegotiationResponse
@@ -35,6 +31,10 @@
 @synthesize connectionId = _connectionId;
 @synthesize url = _url;
 @synthesize protocolVersion = _protocolVersion;
+
+static NSString * const kConnectionId = @"ConnectionId";
+static NSString * const kUrl = @"Url";
+static NSString * const kProtocolVersion = @"ProtocolVersion";
 
 - (id) init
 {
@@ -56,24 +56,6 @@
         _protocolVersion = [NSString stringWithFormat:@"%@",[dict objectForKey:kProtocolVersion]];
 	}
 	return self;
-}
-
-- (void)updateWithDictionary:(NSDictionary *)dict
-{
-    _connectionId = ([dict objectForKey:kConnectionId]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kConnectionId]] : _connectionId;
-    _url = ([dict objectForKey:kUrl]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kUrl]] : _url;
-    _protocolVersion = ([dict objectForKey:kProtocolVersion]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kProtocolVersion]] : _protocolVersion;
-}
-
-- (id)proxyForJson
-{
-    NSMutableDictionary* dict = [[NSMutableDictionary alloc] init];
-    
-    [dict setObject:[NSString stringWithFormat:@"%@",_connectionId] forKey:kConnectionId];
-    [dict setObject:[NSString stringWithFormat:@"%@",_url] forKey:kUrl];
-    [dict setObject:[NSString stringWithFormat:@"%@",_protocolVersion] forKey:kProtocolVersion];
-    
-    return dict;
 }
 
 - (NSString *)description 

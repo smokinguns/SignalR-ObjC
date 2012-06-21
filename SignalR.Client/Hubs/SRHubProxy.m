@@ -20,14 +20,14 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
+#import "SRConnection.h"
+#import "SRHubInvocation.h"
 #import "SRHubProxy.h"
+#import "SRHubResult.h"
 #import "SRSignalRConfig.h"
+#import "SRSubscription.h"
 
 #import "NSObject+SRJSON.h"
-#import "SRConnection.h"
-#import "SRSubscription.h"
-#import "SRHubInvocation.h"
-#import "SRHubResult.h"
 
 @interface SRHubProxy ()
 
@@ -67,7 +67,7 @@
 {
     if([eventName isEqualToString:@""] || eventName == nil)
     {
-        [NSException raise:@"ArgumentNullException" format:@"Argument %@ is null", @"eventName"];
+        [NSException raise:NSInvalidArgumentException format:NSLocalizedString(@"Argument eventName is null",@"NSInvalidArgumentException")];
     }
     
     SRSubscription *subscription = [_subscriptions objectForKey:eventName];
@@ -127,11 +127,11 @@
     [self invoke:method withArgs:args continueWith:nil];
 }
 
-- (void)invoke:(NSString *)method withArgs:(NSArray *)args continueWith:(void(^)(id data))responseBlock
+- (void)invoke:(NSString *)method withArgs:(NSArray *)args continueWith:(void (^)(id response))block
 {
     if([method isEqualToString:@""] || method == nil)
     {
-        [NSException raise:@"ArgumentNullException" format:@"Argument %@ is null", @"method"];
+        [NSException raise:NSInvalidArgumentException format:NSLocalizedString(@"Argument method is null",@"NSInvalidArgumentException")];
     }
     
     SRHubInvocation *hubData = [[SRHubInvocation alloc] init];
@@ -142,41 +142,41 @@
     
     NSString *value = [hubData SRJSONRepresentation];
         
-    [_connection send:value continueWith:^(id response)
+    [_connection send:value continueWith:^(NSDictionary *response)
     {
 #if DEBUG_SERVER_SENT_EVENTS || DEBUG_LONG_POLLING || DEBUG_HTTP_BASED_TRANSPORT
         SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] did receive response %@",response);
 #endif
-         if([response isKindOfClass:[NSString class]])
-         {
-             SRHubResult *hubResult = [[SRHubResult alloc] initWithDictionary:[response SRJSONValue]];
-             if (hubResult != nil) 
-             {
-                 if(![hubResult.error isKindOfClass:[NSNull class]] && hubResult.error != nil)
-                 {
-                     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-                     [userInfo setObject:[NSString stringWithFormat:@"InvalidOperationException"] forKey:NSLocalizedFailureReasonErrorKey];
-                     [userInfo setObject:[NSString stringWithFormat:@"%@",hubResult.error] forKey:NSLocalizedDescriptionKey];
-                     NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:@"com.SignalR-ObjC.%@",NSStringFromClass([self class])] 
-                                                          code:0 
-                                                      userInfo:userInfo];
-                     [_connection didReceiveError:error];
-                 }
-                 
-                 if(![hubResult.state isKindOfClass:[NSNull class]] && hubResult.state != nil)
-                 {
-                     for (id key in hubResult.state)
-                     {
-                         [self setMember:key object:[hubResult.state objectForKey:key]];
-                     }
-                 }
-                 
-                 if(responseBlock != nil)
-                 {
-                     responseBlock(hubResult.result);
-                 }
-             }
-         }
+        if(response)
+        {
+            SRHubResult *hubResult = [[SRHubResult alloc] initWithDictionary:response];
+            if (hubResult != nil) 
+            {
+                if(![hubResult.error isKindOfClass:[NSNull class]] && hubResult.error != nil)
+                {
+                    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+                    [userInfo setObject:NSInternalInconsistencyException forKey:NSLocalizedFailureReasonErrorKey];
+                    [userInfo setObject:[NSString stringWithFormat:@"%@",hubResult.error] forKey:NSLocalizedDescriptionKey];
+                    NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:NSLocalizedString(@"com.SignalR-ObjC.%@",@""),NSStringFromClass([self class])] 
+                                                         code:0 
+                                                     userInfo:userInfo];
+                    [_connection didReceiveError:error];
+                }
+                
+                if(![hubResult.state isKindOfClass:[NSNull class]] && hubResult.state != nil)
+                {
+                    for (id key in hubResult.state)
+                    {
+                        [self setMember:key object:[hubResult.state objectForKey:key]];
+                    }
+                }
+                
+                if(block != nil)
+                {
+                    block(hubResult.result);
+                }
+            }
+        }
     }];
 }
 

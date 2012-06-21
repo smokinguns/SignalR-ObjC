@@ -21,10 +21,12 @@
 //
 
 #import "SRLongPollingTransport.h"
+#import "SRConnection.h"
+#import "SRConnectionExtensions.h"
+#import "SRDefaultHttpClient.h"
+#import "SRExceptionHelper.h"
 #import "SRSignalRConfig.h"
 
-#import "SRDefaultHttpClient.h"
-#import "SRConnection.h"
 #import "NSTimer+Blocks.h"
 
 typedef void (^onInitialized)(void);
@@ -37,14 +39,14 @@ typedef void (^onInitialized)(void);
 - (void)pollingLoop:(SRConnection *)connection data:(NSString *)data initializeCallback:(void (^)(void))initializeCallback errorCallback:(void (^)(SRErrorByReferenceBlock))errorCallback raiseReconnect:(BOOL)raiseReconnect;
 - (void)fireReconnected:(SRConnection *)connection reconnectCancelled:(BOOL)cancelled reconnectedFired:(int *)reconnectedFired;
 
-#define kTransportName @"longPolling"
-
 @end
 
 @implementation SRLongPollingTransport
 
 @synthesize reconnectDelay = _reconnectDelay;
 @synthesize errorDelay = _errorDelay;
+
+static NSString * const kTransportName = @"longPolling";
 
 - (id)init
 {
@@ -90,15 +92,17 @@ typedef void (^onInitialized)(void);
     else if (raiseReconnect)
     {
         url = [url stringByAppendingString:kReconnectEndPoint];
+        
+        connection.state = reconnecting;
     }
     
     url = [url stringByAppendingFormat:@"%@",[self getReceiveQueryString:connection data:data]];
     
-    [self.httpClient postAsync:url requestPreparer:^(id request)
+    [self.httpClient postAsync:url requestPreparer:^(id<SRRequest> request)
     {
         [self prepareRequest:request forConnection:connection];
     } 
-    continueWith:^(id response)
+    continueWith:^(id<SRResponse> response)
     {
 #if DEBUG_LONG_POLLING || DEBUG_HTTP_BASED_TRANSPORT
         SR_DEBUG_LOG(@"[LONG_POLLING] did receive response %@",response);
@@ -109,24 +113,21 @@ typedef void (^onInitialized)(void);
         BOOL shouldRaiseReconnect = NO;
         BOOL disconnectedReceived = NO;
         
-        BOOL isFaulted = ([response isKindOfClass:[NSError class]] || 
-                          [response isEqualToString:@""] || response == nil ||
-                          [response isEqualToString:@"null"]);
+        BOOL isFaulted = (response.error || 
+                          [response.string isEqualToString:@""] ||
+                          [response.string isEqualToString:@"null"]);
         @try 
         {
-            if([response isKindOfClass:[NSString class]])
+            if(!isFaulted)
             {
-                if(!isFaulted)
+                if(raiseReconnect)
                 {
-                    if(raiseReconnect)
-                    {
-                        // If the timeout for the receonnect hasn't fired as yet just fire the 
-                        // Event here before any incoming messages are processed
-                        [self fireReconnected:connection reconnectCancelled:reconnectCancelled reconnectedFired:&reconnectFired];
-                    }
-                    
-                    [self processResponse:connection response:response timedOut:&shouldRaiseReconnect disconnected:&disconnectedReceived];
+                    // If the timeout for the receonnect hasn't fired as yet just fire the 
+                    // Event here before any incoming messages are processed
+                    [self fireReconnected:connection reconnectCancelled:reconnectCancelled reconnectedFired:&reconnectFired];
                 }
+                
+                [self processResponse:connection response:response.string timedOut:&shouldRaiseReconnect disconnected:&disconnectedReceived];
             }
         }
         @finally 
@@ -153,7 +154,7 @@ typedef void (^onInitialized)(void);
                     // Raise the reconnect event if we successfully reconect after failing
                     shouldRaiseReconnect = YES;
                     
-                    if([response isKindOfClass:[NSError class]])
+                    if(response.error)
                     {
                         // If the error callback isn't null then raise it and don't continue polling
                         if (errorCallback && callbackFired == 0)
@@ -162,27 +163,28 @@ typedef void (^onInitialized)(void);
                             SR_DEBUG_LOG(@"[LONG_POLLING] will report error to errorCallback");
 #endif
                             callbackFired = 1;
-                            
-                            [connection didReceiveError:response];
-                            
+
                             //Call the callback
                             SRErrorByReferenceBlock errorBlock = ^(NSError ** error)
                             {
-                                *error = response;
+                                if(error)
+                                {
+                                    *error = response.error;
+                                }
                             };
                             errorCallback(errorBlock);
                         }
                         else
                         {
                             //Figure out if the request is aborted
-                            requestAborted = [self isRequestAborted:response];
+                            requestAborted = [SRExceptionHelper isRequestAborted:response.error];
                             
                             //Sometimes a connection might have been closed by the server before we get to write anything
                             //So just try again and don't raise an error
                             if(!requestAborted)
                             {
                                 //Raise Error
-                                [connection didReceiveError:response];
+                                [connection didReceiveError:response.error];
                                 
                                 //If the connection is still active after raising the error wait 2 seconds 
                                 //before polling again so we arent hammering the server
@@ -192,7 +194,7 @@ typedef void (^onInitialized)(void);
 #endif
                                 [NSTimer scheduledTimerWithTimeInterval:_errorDelay block:
                                  ^{
-                                     if (connection.isActive)
+                                     if (![connection isDisconnecting])
                                      {
                                          [self pollingLoop:connection data:data initializeCallback:nil errorCallback:nil raiseReconnect:shouldRaiseReconnect];
                                      }
@@ -203,7 +205,7 @@ typedef void (^onInitialized)(void);
                 }
                 else
                 {
-                    if (connection.isActive)
+                    if (![connection isDisconnecting])
                     {
 #if DEBUG_LONG_POLLING || DEBUG_HTTP_BASED_TRANSPORT
                         SR_DEBUG_LOG(@"[LONG_POLLING] will poll again immediately");
@@ -242,6 +244,10 @@ typedef void (^onInitialized)(void);
         SR_DEBUG_LOG(@"[LONG_POLLING] did fire reconnected");
 #endif
         *reconnectedFired = 1;
+        
+        //Mark the connection as connected
+        connection.state = connected;
+        
         [connection didReconnect];
     }
 }

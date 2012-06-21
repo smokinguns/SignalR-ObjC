@@ -1,6 +1,6 @@
 //
 //  DefaultHttpClient.m
-//  SignalR.Samples
+//  SignalR
 //
 //  Created by Alex Billingsley on 3/23/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
@@ -21,24 +21,32 @@
 //
 
 #import "SRDefaultHttpClient.h"
-
-#import "SRHttpHelper.h"
+#import "SRDefaultHttpHelper.h"
+#import "SRDefaultHttpWebRequestWrapper.h"
+#import "SRDefaultHttpWebResponseWrapper.h"
 
 @implementation SRDefaultHttpClient
 
-- (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest continueWith:(void (^)(id response))block
+- (void)getAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest continueWith:(SRResponseBlock)block
 {
-    [SRHttpHelper getAsync:url requestPreparer:prepareRequest continueWith:block];
+    [SRDefaultHttpHelper getAsync:url 
+                  requestPreparer:^(id request) { if (prepareRequest) prepareRequest([[SRDefaultHttpWebRequestWrapper alloc] initWithRequest:request]); }
+                     continueWith:^(id response) { if (block) block([[SRDefaultHttpWebResponseWrapper alloc] initWithResponse:response]); }];
 }
 
-- (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest continueWith:(void (^)(id response))block
+- (void)postAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest continueWith:(SRResponseBlock)block
 {
-    [SRHttpHelper postAsync:url requestPreparer:prepareRequest continueWith:block];
+    [SRDefaultHttpHelper postAsync:url 
+                   requestPreparer:^(id request) { if (prepareRequest) prepareRequest([[SRDefaultHttpWebRequestWrapper alloc] initWithRequest:request]); } 
+                      continueWith:^(id response) { if (block) block([[SRDefaultHttpWebResponseWrapper alloc] initWithResponse:response]); }];
 }
 
-- (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))prepareRequest postData:(id)postData continueWith:(void (^)(id response))block
+- (void)postAsync:(NSString *)url requestPreparer:(SRRequestBlock)prepareRequest postData:(id)postData continueWith:(SRResponseBlock)block
 {
-    [SRHttpHelper postAsync:url requestPreparer:prepareRequest postData:postData continueWith:block];
+    [SRDefaultHttpHelper postAsync:url 
+                   requestPreparer:^(id request) { if (prepareRequest) prepareRequest([[SRDefaultHttpWebRequestWrapper alloc] initWithRequest:request]); } 
+                          postData:postData 
+                      continueWith:^(id response) { if (block) block([[SRDefaultHttpWebResponseWrapper alloc] initWithResponse:response]); }];
 }
 
 @end

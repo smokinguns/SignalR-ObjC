@@ -24,11 +24,6 @@
 
 @interface SRHubInvocation ()
 
-#define kHub @"Hub"
-#define kMethod @"Method"
-#define kArgs @"Args"
-#define kState @"State"
-
 @end
 
 @implementation SRHubInvocation
@@ -37,6 +32,11 @@
 @synthesize method = _method;
 @synthesize args = _args;
 @synthesize state = _state;
+
+static NSString * const kHub = @"Hub";
+static NSString * const kMethod = @"Method";
+static NSString * const kArgs = @"Args";
+static NSString * const kState = @"State";
 
 - (id) init
 {
@@ -60,14 +60,6 @@
         self.state = [dict objectForKey:kState];
     }
     return self;
-}
-
-- (void)updateWithDictionary:(NSDictionary *)dict
-{
-    self.hub = ([dict objectForKey:kHub]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kHub]] : _hub;
-    self.method = ([dict objectForKey:kMethod]) ? [NSString stringWithFormat:@"%@",[dict objectForKey:kMethod]] : _method;
-    self.args = ([dict objectForKey:kArgs]) ? [dict objectForKey:kArgs] : _args;
-    self.state = ([dict objectForKey:kState]) ? [dict objectForKey:kState] : _state;
 }
 
 - (id)proxyForJson

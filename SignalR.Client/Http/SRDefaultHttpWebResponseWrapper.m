@@ -1,8 +1,8 @@
 //
-//  SRHubservable.m
+//  SRDefaultHttpWebResponseWrapper.m
 //  SignalR
 //
-//  Created by Alex Billingsley on 11/4/11.
+//  Created by Alex Billingsley on 6/8/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,55 +20,46 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHubProxy.h"
-#import "SRHubservable.h"
-#import "SRSubscription.h"
+#import "SRDefaultHttpWebResponseWrapper.h"
 
-@interface SRHubservable ()
+@interface SRDefaultHttpWebResponseWrapper ()
+
+@property (strong, nonatomic, readwrite) id response;
 
 @end
 
-@implementation SRHubservable
+@implementation SRDefaultHttpWebResponseWrapper
 
-@synthesize proxy = _proxy;
-@synthesize eventName = _eventName;
+@synthesize string = _string;
+@synthesize stream = _stream;
+@synthesize error = _error;
 
-#pragma mark - 
-#pragma mark Initialization
+@synthesize response = _response;
 
-+ (id)observe:(SRHubProxy *)proxy event:(NSString *)eventName
+- (id)initWithResponse:(id)response
 {
-    return [[SRHubservable alloc] initWithProxy:proxy eventName:eventName];
-}
-
-- (id)initWithProxy:(SRHubProxy *)proxy eventName:(NSString *)eventName
-{
-    if (self = [super init]) 
+    static NSString *empty = @"";
+    
+    if (self = [super init])
     {
-        _proxy = proxy;
-        _eventName = eventName;
+        if([response isKindOfClass:[NSError class]])
+        {
+            _error = response;
+        }
+        else if([response isKindOfClass:[NSOutputStream class]])
+        {
+            _stream = response;
+        }
+        else if([response isKindOfClass:[NSString class]])
+        {
+            _string = response;
+        }
+        else
+        {
+            _string = empty;
+        }
     }
     return self;
-}
-
-- (SRSubscription *)subscribe:(NSObject *)object selector:(SEL)selector
-{
-    SRSubscription *subscription = [_proxy subscribe:_eventName];
-    subscription.object = object;
-    subscription.selector = selector;
-    
-    return subscription;
-}
-
-- (NSString *)description 
-{  
-    return [NSString stringWithFormat:@"Hubservable: Hub:%@ Event=%@",_proxy, _eventName];
-}
-
-- (void)dealloc
-{
-    _proxy = nil;
-    _eventName = nil;
 }
 
 @end

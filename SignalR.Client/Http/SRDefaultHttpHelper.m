@@ -1,8 +1,8 @@
 //
-//  SRHttpHelper.m
+//  SRDefaultHttpHelper.m
 //  SignalR
 //
-//  Created by Alex Billingsley on 10/18/11.
+//  Created by Alex Billingsley on 6/6/12.
 //  Copyright (c) 2011 DyKnow LLC. (http://dyknow.com/)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,13 +20,13 @@
 //  DEALINGS IN THE SOFTWARE.
 //
 
-#import "SRHttpHelper.h"
+#import "AFNetworking.h"
+#import "SRDefaultHttpHelper.h"
 #import "SRSignalRConfig.h"
 
-#import "AFNetworking.h"
 #import "NSDictionary+QueryString.h"
 
-@interface SRHttpHelper ()
+@interface SRDefaultHttpHelper ()
 
 #pragma mark - 
 #pragma mark GET Requests Implementation
@@ -36,12 +36,12 @@
  * Subclasses should override this function 
  *
  * @param url: The url relative to the server endpoint
- * @param parameters: An Object that conforms to proxyForJSON to pass as parameters to the endpoint
+ * @param parameters: An Object that conforms to SRSerializable to pass as parameters to the endpoint
  * @param requestPreparer: A function to be called on the NSMutableURLRequest created for the request
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block: A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-- (void)getInternal:(NSString *)url requestPreparer:(void(^)(id))requestPreparer parameters:(id)parameters continueWith:(void (^)(id response))block;
++ (void)getInternal:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer parameters:(id)parameters continueWith:(SRContinueWithBlock)block;
 
 #pragma mark - 
 #pragma mark POST Requests Implementation
@@ -51,51 +51,41 @@
  * Subclasses should override this function 
  *
  * @param url: The url relative to the server endpoint
- * @param postData: An Object that conforms to proxyForJSON to post at the url
+ * @param postData: An Object that conforms to SRSerializable to post at the url
  * @param requestPreparer: A function to be called on the NSMutableURLRequest created for the request
  * This can be used to modify properties of the POST, for example timeout or cache protocol
  * @param block: A function to be called when the post finishes. The block should handle both SUCCESS and FAILURE
  */
-- (void)postInternal:(NSString *)url requestPreparer:(void(^)(id))requestPreparer postData:(id)postData continueWith:(void (^)(id response))block;
++ (void)postInternal:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer postData:(id)postData continueWith:(SRContinueWithBlock)block;
 
 @end
 
-static id sharedHttpRequestManager = nil;
-
-@implementation SRHttpHelper
-
-+ (id)sharedHttpRequestManager
-{
-    if (sharedHttpRequestManager == nil) {
-		sharedHttpRequestManager = [[self alloc] init];
-	}
-	return sharedHttpRequestManager;
-}
+@implementation SRDefaultHttpHelper
 
 #pragma mark - 
 #pragma mark GET Requests Implementation
 
-+ (void)getAsync:(NSString *)url continueWith:(void (^)(id response))block
++ (void)getAsync:(NSString *)url continueWith:(SRContinueWithBlock)block
 {
-     [[self class] getAsync:url requestPreparer:nil continueWith:block];
+    [[self class] getAsync:url requestPreparer:nil continueWith:block];
 }
 
-+ (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer continueWith:(void (^)(id response))block
++ (void)getAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer continueWith:(SRContinueWithBlock)block
 {
     [[self class] getAsync:url requestPreparer:requestPreparer parameters:[[NSDictionary alloc] init] continueWith:block];
 }
 
-+ (void)getAsync:(NSString *)url parameters:(id)parameters continueWith:(void (^)(id response))block;
++ (void)getAsync:(NSString *)url parameters:(id)parameters continueWith:(SRContinueWithBlock)block
 {
     [[self class] getAsync:url requestPreparer:nil parameters:parameters continueWith:block];
 }
 
-+ (void)getAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer parameters:(id)parameters continueWith:(void (^)(id response))block
++ (void)getAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer parameters:(id)parameters continueWith:(SRContinueWithBlock)block
 {
-    [[self sharedHttpRequestManager] getInternal:url requestPreparer:requestPreparer parameters:parameters continueWith:block];
+    [[self class] getInternal:url requestPreparer:requestPreparer parameters:parameters continueWith:block];
 }
 
-- (void)getInternal:(NSString *)url requestPreparer:(void(^)(id))requestPreparer parameters:(id)parameters continueWith:(void (^)(id response))block
++ (void)getInternal:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer parameters:(id)parameters continueWith:(SRContinueWithBlock)block
 {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     [request setHTTPMethod:@"GET"];
@@ -122,12 +112,10 @@ static id sharedHttpRequestManager = nil;
     BOOL useOutputStream = ([[request.allHTTPHeaderFields objectForKey:@"Accept"] isEqualToString:@"text/event-stream"]);
     if(useOutputStream)
     {
-        NSOutputStream *oStream = [NSOutputStream outputStreamToMemory];
         if(block)
         {
-            block(oStream);
+            block(operation.outputStream);
         }
-        operation.outputStream = oStream;
     }
     [operation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) 
     {
@@ -140,7 +128,8 @@ static id sharedHttpRequestManager = nil;
         {
             block((useOutputStream) ? nil : operation.responseString);
         }
-    } failure:^(AFHTTPRequestOperation *operation, NSError *error) 
+    } 
+    failure:^(AFHTTPRequestOperation *operation, NSError *error) 
     {
 #if DEBUG_HTTP_HELPER
         NSString *debugOutput = [NSString stringWithFormat:@"Request (%@ %@) failed \n",operation.request.HTTPMethod,[operation.request.URL absoluteString]];
@@ -158,27 +147,27 @@ static id sharedHttpRequestManager = nil;
 #pragma mark - 
 #pragma mark POST Requests Implementation
 
-+ (void)postAsync:(NSString *)url continueWith:(void (^)(id response))block
++ (void)postAsync:(NSString *)url continueWith:(SRContinueWithBlock)block
 {
     [[self class] postAsync:url requestPreparer:nil continueWith:block];
 }
 
-+ (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer continueWith:(void (^)(id response))block
++ (void)postAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer continueWith:(SRContinueWithBlock)block
 {
     [[self class] postAsync:url requestPreparer:requestPreparer postData:[[NSDictionary alloc] init] continueWith:block];
 }
 
-+ (void)postAsync:(NSString *)url postData:(id)postData continueWith:(void (^)(id response))block
++ (void)postAsync:(NSString *)url postData:(id)postData continueWith:(SRContinueWithBlock)block
 {
     [[self class] postAsync:url requestPreparer:nil postData:postData continueWith:block];
 }
 
-+ (void)postAsync:(NSString *)url requestPreparer:(void(^)(id))requestPreparer postData:(id)postData continueWith:(void (^)(id response))block
++ (void)postAsync:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer postData:(id)postData continueWith:(SRContinueWithBlock)block
 {
-    [[self sharedHttpRequestManager] postInternal:url requestPreparer:requestPreparer postData:postData continueWith:block];
+    [[self class] postInternal:url requestPreparer:requestPreparer postData:postData continueWith:block];
 }
 
-- (void)postInternal:(NSString *)url requestPreparer:(void(^)(id))requestPreparer postData:(id)postData continueWith:(void (^)(id response))block
++ (void)postInternal:(NSString *)url requestPreparer:(SRPrepareRequestBlock)requestPreparer postData:(id)postData continueWith:(SRContinueWithBlock)block
 {
     NSData *requestData = [[postData stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
     
@@ -216,7 +205,8 @@ static id sharedHttpRequestManager = nil;
         {
             block(operation.responseString);
         }
-    } failure:^(AFHTTPRequestOperation *operation, NSError *error) 
+    } 
+    failure:^(AFHTTPRequestOperation *operation, NSError *error) 
     {
 #if DEBUG_HTTP_HELPER
         NSString *debugOutput = [NSString stringWithFormat:@"Request (%@ %@) failed \n",operation.request.HTTPMethod,[operation.request.URL absoluteString]];

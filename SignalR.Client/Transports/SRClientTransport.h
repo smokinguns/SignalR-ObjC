@@ -23,13 +23,14 @@
 #import <Foundation/Foundation.h>
 
 @class SRConnection;
+@class SRNegotiationResponse;
 
 /**
  * `SRClientTransport` defines the protocol each Client Transport should conform to
  **/
 @protocol SRClientTransport <NSObject>
 
-- (void)negotiate:(SRConnection *)connection continueWith:(void(^)(id))block;
+- (void)negotiate:(SRConnection *)connection continueWith:(void (^)(SRNegotiationResponse *response))block;
 
 /**
  * Opens a connection to the server for the active transport
@@ -38,7 +39,7 @@
  * @param data the data to send when starting the transport on, may be nil
  * @param block the block to be called once start finishes, block may be nil
  */
-- (void)start:(SRConnection *)connection withData:(NSString *)data continueWith:(void(^)(id))block;
+- (void)start:(SRConnection *)connection withData:(NSString *)data continueWith:(void (^)(id response))block;
 
 /**
  * Sends data to the server for the active transport

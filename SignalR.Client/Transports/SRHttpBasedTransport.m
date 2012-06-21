@@ -21,15 +21,13 @@
 //
 
 #import "SRHttpBasedTransport.h"
-#import "SRSignalRConfig.h"
-
-#import "NSObject+SRJSON.h"
-#import "AFNetworking.h"
 #import "SRConnection.h"
 #import "SRConnectionExtensions.h"
 #import "SRNegotiationResponse.h"
+#import "SRSignalRConfig.h"
 
 #import "NSDictionary+QueryString.h"
+#import "NSObject+SRJSON.h"
 #import "NSString+QueryString.h"
 
 @interface SRHttpBasedTransport()
@@ -53,51 +51,48 @@
     return self;
 }
 
-- (void)negotiate:(SRConnection *)connection continueWith:(void (^)(id))block
+- (void)negotiate:(SRConnection *)connection continueWith:(void (^)(SRNegotiationResponse *response))block
 {
     [SRHttpBasedTransport getNegotiationResponse:_httpClient connection:connection continueWith:block];
 }
 
-+ (void)getNegotiationResponse:(id <SRHttpClient>)httpClient connection:(SRConnection *)connection continueWith:(void (^)(id))block
++ (void)getNegotiationResponse:(id <SRHttpClient>)httpClient connection:(SRConnection *)connection continueWith:(void (^)(SRNegotiationResponse *response))block
 {
     NSString *negotiateUrl = [connection.url stringByAppendingString:kNegotiateRequest];
     
-    [httpClient getAsync:negotiateUrl requestPreparer:^(id request)
+    [httpClient getAsync:negotiateUrl requestPreparer:^(id<SRRequest> request)
     {
-        if([request isKindOfClass:[NSMutableURLRequest class]])
-        {
-            [request setTimeoutInterval:30];
-        }
+        [request setTimeoutInterval:30];
+        
         [connection prepareRequest:request];
     }
-    continueWith:^(id response)
+    continueWith:^(id<SRResponse> response)
     {
-#if DEBUG_HTTP_BASED_TRANSPORT
-        SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] negotiation did receive response %@",response);
-#endif
-        BOOL isFaulted = ([response isKindOfClass:[NSError class]] || 
-                          [response isEqualToString:@""] || response == nil ||
-                          [response isEqualToString:@"null"]);
+        NSString *raw = response.string;
         
-        if([response isKindOfClass:[NSString class]])
+        if (raw == nil || [raw isEqualToString:@""])
         {
-            if(!isFaulted)
-            {
-                SRNegotiationResponse *negotiationResponse = [[SRNegotiationResponse alloc] initWithDictionary:[response SRJSONValue]];
-                
-                if(block)
-                {
-                    block(negotiationResponse);
-                }
-            }
+#if DEBUG_HTTP_BASED_TRANSPORT
+            SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] negotiation failed, connection will stop");
+#endif
+            NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+            [userInfo setObject:NSInternalInconsistencyException forKey:NSLocalizedFailureReasonErrorKey];
+            [userInfo setObject:[NSString stringWithFormat:NSLocalizedString(@"Server negotiation failed.",@"NSInternalInconsistencyException")] forKey:NSLocalizedDescriptionKey];
+            NSError *error = [NSError errorWithDomain:[NSString stringWithFormat:NSLocalizedString(@"com.SignalR-ObjC.%@",@""),NSStringFromClass([self class])] 
+                                                 code:0 
+                                             userInfo:userInfo];
+            [connection didReceiveError:error];
+            [connection stop];
+            return;
         }
         
-        if(isFaulted)
-        {
-#if DEBUG_CONNECTION
-            SR_DEBUG_LOG(@"[CONNECTION] negotiation failed, connection will stop");
+#if DEBUG_HTTP_BASED_TRANSPORT
+        SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] negotiation did receive response %@",raw);
 #endif
-            [connection stop];
+        
+        if(block)
+        {
+            block([[SRNegotiationResponse alloc] initWithDictionary:[raw SRJSONValue]]);
         }
     }];
 }
@@ -105,10 +100,15 @@
 #pragma mark -
 #pragma mark SRConnectionTransport Protocol
 
-- (void)start:(SRConnection *)connection withData:(NSString *)data continueWith:(void (^)(id))tcs
+- (void)start:(SRConnection *)connection withData:(NSString *)data continueWith:(void (^)(id response))tcs
 {
-    [self onStart:connection data:data initializeCallback:^{ if(tcs) tcs(nil); } 
-    errorCallback:^(SRErrorByReferenceBlock block) {
+    [self onStart:connection data:data 
+    initializeCallback:^
+    { 
+        if(tcs) tcs(nil); 
+    } 
+    errorCallback:^(SRErrorByReferenceBlock block) 
+    {
         NSError *error = nil;
         if (tcs && block)
         {
@@ -120,7 +120,7 @@
 
 - (void)onStart:(SRConnection *)connection data:(NSString *)data initializeCallback:(void (^)(void))initializeCallback errorCallback:(void (^)(SRErrorByReferenceBlock))errorCallback
 {
-    [NSException raise:@"AbstractClassException" format:@"Must use an overriding class of DKHttpBasedTransport"];
+    [NSException raise:NSGenericException format:NSLocalizedString(@"Must use an overriding class of SRHttpBasedTransport",@"")];
 }
 
 - (void)send:(SRConnection *)connection withData:(NSString *)data continueWith:(void (^)(id response))block
@@ -135,32 +135,24 @@
     SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] will send data");
 #endif
     
-    if(block == nil)
+    [_httpClient postAsync:url requestPreparer:^(id<SRRequest> request)
     {
-        [_httpClient postAsync:url requestPreparer:^(id request)
-        {
-            [connection prepareRequest:request];
-        } 
-        postData:postData continueWith:
-        ^(id response)
-        {
-            if([response isKindOfClass:[NSString class]])
-            {
-                if([response isEqualToString:@""] == NO && response != nil)
-                {
-                    [connection didReceiveData:response];
-                }
-            }
-        }];
-    }
-    else
+        [connection prepareRequest:request];
+    } 
+    postData:postData continueWith:^(id<SRResponse> response)
     {
-        [_httpClient postAsync:url requestPreparer:^(id request)
+        NSString *raw = response.string;
+        
+        if (raw == nil || [raw isEqualToString:@""])
         {
-            [connection prepareRequest:request];
+            return;
         }
-        postData:postData continueWith:block];
-    }
+
+        if(block)
+        {
+            block([raw SRJSONValue]);
+        }
+    }];
 }
 
 - (void)stop:(SRConnection *)connection
@@ -168,28 +160,21 @@
 #if DEBUG_SERVER_SENT_EVENTS || DEBUG_LONG_POLLING || DEBUG_HTTP_BASED_TRANSPORT
     SR_DEBUG_LOG(@"[HTTP_BASED_TRANSPORT] will stop transport");
 #endif
-    AFHTTPRequestOperation *httpRequest = [connection getValue:kHttpRequestKey];
+    id <SRRequest> httpRequest = [connection getValue:kHttpRequestKey];
     
     if(httpRequest != nil)
     {
-        @try 
-        {
-            [self onBeforeAbort:connection];
-            [httpRequest cancel];
-        }
-        @catch (NSError *error) {
-            //NotImplementedException
-        }
+        [self onBeforeAbort:connection];
+        
+        // Abort the server side connection
+        [self abortConnection:connection];
+        
+        [httpRequest abort];
     }
 }
 
 #pragma mark - 
 #pragma mark Protected Helpers
-
-- (BOOL)isRequestAborted:(NSError *)error
-{
-    return (error != nil && ([error.domain isEqualToString:AFNetworkingErrorDomain]));
-}
 
 //?transport=<transportname>&connectionId=<connectionId>&messageId=<messageId_or_Null>&groups=<groups>&connectionData=<data><customquerystring>
 - (NSString *)getReceiveQueryString:(SRConnection *)connection data:(NSString *)data
@@ -230,15 +215,20 @@
     return [NSString stringWithFormat:@"?%@%@",[parameters stringWithFormEncodedComponents],[self getCustomQueryString:connection]];
 }
 
-- (void)prepareRequest:(id)request forConnection:(SRConnection *)connection;
+- (void)prepareRequest:(id <SRRequest>)request forConnection:(SRConnection *)connection;
 {
     //Setup the user agent along with and other defaults
     [connection prepareRequest:request];
     
-    if([request isKindOfClass:[AFHTTPRequestOperation class]])
-    {
-        [connection.items setObject:request forKey:kHttpRequestKey];
-    }
+    [connection.items setObject:request forKey:kHttpRequestKey];
+}
+
+- (void)abortConnection:(SRConnection *)connection
+{
+    NSString *url = [connection.url stringByAppendingString:kAbortEndPoint];
+    url = [url stringByAppendingFormat:@"%@",[self getSendQueryString:connection]];
+    
+    [_httpClient postAsync:url requestPreparer:^(id <SRRequest> request){ [connection prepareRequest:request]; } continueWith:nil];
 }
 
 - (void)onBeforeAbort:(SRConnection *)connection
@@ -322,6 +312,7 @@
 
 - (void)dealloc
 {
+    _httpClient = nil;
     _transport = nil;
 }
 @end
